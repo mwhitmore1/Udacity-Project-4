@@ -108,11 +108,14 @@ class ConferenceQueryForms(messages.Message):
 
 
 class StartTime(ndb.Model):
+    """StartTime == used for the startTime property of the Conference class
+    to make the start time of allow greater/less than queries of a conferences
+    start times."""
     hour  = ndb.IntegerProperty()
     minute = ndb.IntegerProperty()
 
 
-class Session(Conference):
+class Session(ndb.Model):
     name = ndb.StringProperty()
     highlights = ndb.StringProperty(repeated=True)
     speaker = ndb.StringProperty()
@@ -122,7 +125,9 @@ class Session(Conference):
     startTime = ndb.StructuredProperty(StartTime)
 
 
-class SessionForm(messages.Message):
+class CreateSessionForm(messages.Message):
+    """CreateSessionForm -- used to send data to server to create new session
+    object."""
     name = messages.StringField(1)
     date = messages.StringField(2)
     startTime = messages.StringField(3)
@@ -131,6 +136,18 @@ class SessionForm(messages.Message):
     duration = messages.IntegerField(6)
     typeOfSession = messages.StringField(7, repeated=True)
     websafeConferenceKey = messages.StringField(8)
+
+
+class SessionForm(messages.Message):
+    """SessionForm -- outbound message used to pass data about a session."""
+    name = messages.StringField(1)
+    date = messages.StringField(2)
+    startTime = messages.StringField(3)
+    highlights = messages.StringField(4, repeated=True)
+    speaker = messages.StringField(5)
+    duration = messages.IntegerField(6)
+    typeOfSession = messages.StringField(7, repeated=True)
+    websafeSessionKey = messages.StringField(8)
 
 
 class SessionForms(messages.Message):
@@ -164,6 +181,16 @@ class BooleanMessage(messages.Message):
 class ConflictException(endpoints.ServiceException):
     """ConflictException -- exception mapped to HTTP 409 response"""
     http_status = httplib.CONFLICT
+
+
+class SpeakerForm(messages.Message):
+    """SpeakerForm -- outbound (single) string message"""
+    speaker = messages.StringField(1, required=True)
+
+
+class HighlightsForm(messages.Message):
+    """HighlightsForm -- outbound (multiple) string message."""
+    highlights = messages.StringField(1, repeated=True)
 
 
 # needed for memcache

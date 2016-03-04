@@ -100,7 +100,12 @@ indexes:
   - name: topics
   - name: name
 
-- kind: Session 
+- kind: Session
+  properties:
+  - name: __key__
+  - name: conferenceKeysToAttend
+
+- kind: Session
   properties:
   - name: startTime.hour
   - name: typeOfSession
