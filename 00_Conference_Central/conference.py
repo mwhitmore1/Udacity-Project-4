@@ -409,17 +409,17 @@ class ConferenceApi(remote.Service):
 # - - - Sessions - - - - - - - - - - - - - - - - - - - -
 
     @staticmethod
-    def _addFeaturedSpeaker(url_key, speaker):
+    def _addFeaturedSpeaker(url_conf_key, speaker):
         """Checks if the speaker speaking at conference's session is speaking at
         the most sessions at that conference."""
 
         # Get all sssions of the given conferene and filter given speaker.
-        q = Session.query(ancestor=ndb.Key(urlsafe=url_key))
-        sessions = q.filter(Session.speaker == speaker).fetch()
+        q = Session.query(ancestor=ndb.Key(urlsafe=url_conf_key))
+        sessions = q.filter(Session.speaker == speaker)
 
         # if there is more than one session by the same speaker add the
         # speaker and thier sesssions to memcache.
-        session_num = len(sessions)
+        session_num = sessions.count()
 
         # return if the speaker is only giving one session at the conference.
         if session_num <= 1:
@@ -427,7 +427,7 @@ class ConferenceApi(remote.Service):
 
         # check if the speaker is doing more sessions than any other at the
         # conference.
-        cached_speaker = memcache.get(url_key)
+        cached_speaker = memcache.get(url_conf_key)
         if cached_speaker:
             most_sessions = cached_speaker['session_num']
             if session_num <= most_sessions:
@@ -435,9 +435,9 @@ class ConferenceApi(remote.Service):
 
         # set the speaker as featured if they are doing the most sessions.
         featured_speaker = {'speaker': speaker,
-                            'sessions': [session for session in sessions],
+                            'websafeSessionKeys': [session.key.urlsafe() for session in sessions],
                             'session_num': session_num}
-        memcache.set(url_key, featured_speaker)
+        memcache.set(url_conf_key, featured_speaker)
 
 
     @endpoints.method(CONF_GET_REQUEST, FeaturedSpeakerForm,
@@ -452,9 +452,7 @@ class ConferenceApi(remote.Service):
             raise endpoints.NotFoundException("""No featured speaker found in
             memcache for the given conference.""")
         return FeaturedSpeakerForm(speaker=featured_speaker['speaker'],
-            sessions=SessionForms(
-                items=[self._copySessionToForm(session)
-                    for session in featured_speaker['sessions']]))
+            websafeSessionKeys=featured_speaker['websafeSessionKeys'])
 
 
     def _createSessionObject(self, request):
@@ -512,6 +510,10 @@ class ConferenceApi(remote.Service):
 
         new_session = Session(**data)
         new_session.put()
+
+        # Update the featured speaker if there is one.
+        speaker = data['speaker']
+        self._addFeaturedSpeaker(request.websafeConferenceKey, speaker)
 
         # Check to see if the added speaker has the most sessions at the
         # given conference.

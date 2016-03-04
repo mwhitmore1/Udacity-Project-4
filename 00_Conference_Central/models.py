@@ -169,7 +169,7 @@ class SessionsOfConferenceByType(messages.Message):
 
 class FeaturedSpeakerForm(messages.Message):
     speaker = messages.StringField(1)
-    sessions = messages.MessageField(SessionForms, 2)
+    websafeSessionKeys = messages.StringField(2, repeated=True)
 
 
 # needed for conference registration
