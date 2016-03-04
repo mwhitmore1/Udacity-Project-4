@@ -615,10 +615,6 @@ class ConferenceApi(remote.Service):
         q = q.filter(Session.startTime.hour.IN([h for h in range(19)]))
         q = q.filter(Session.typeOfSession != 'Workshop')
 
-        # raise exception if no sessions found.
-        if not q:
-            raise endpoints.NotFoundException('Query returned no results.')
-
         return SessionForms(
             items=[self._copySessionToForm(session) for session in q])
 
@@ -630,10 +626,6 @@ class ConferenceApi(remote.Service):
         """Returns all sessions with any of the highlights provided"""
         q = Session.query()
         q = q.filter(Session.highlights.IN(request.highlights))
-
-        # raise exception if no sessions found.
-        if not q:
-            raise endpoints.NotFoundException('Query returned no results.')
 
         return SessionForms(
             items=[self._copySessionToForm(session) for session in q])
@@ -647,10 +639,6 @@ class ConferenceApi(remote.Service):
         integer provided."""
         q = Session.query()
         q = q.filter(Session.duration <= request.duration)
-
-        # raise exception if no sessions found.
-        if not q:
-            raise endpoints.NotFoundException('Query returned no results.')
 
         return SessionForms(
             items=[self._copySessionToForm(session) for session in q])
