@@ -84,6 +84,7 @@ SESSION_DEFAULTS = {
     "typeOfSession": [ "Default", "Type" ],
     "startTime": "08:00",
     "highlights": [ "Default", "Highlight" ],
+    "duration": 1,
 }
 
 OPERATORS = {
@@ -280,6 +281,7 @@ class ConferenceApi(remote.Service):
     @endpoints.method(ProfileMiniForm, ProfileForm,
             path='profile', http_method='POST', name='saveProfile')
     def saveProfile(self, request):
+        "Make modifications to the users proflie."
         return self._doProfile(request)
 
 
@@ -429,14 +431,13 @@ class ConferenceApi(remote.Service):
         # conference.
         cached_speaker = memcache.get(url_conf_key)
         if cached_speaker:
-            most_sessions = cached_speaker['session_num']
+            most_sessions = len(cached_speaker['websafeSessionKeys'])
             if session_num <= most_sessions:
                 return
 
         # set the speaker as featured if they are doing the most sessions.
         featured_speaker = {'speaker': speaker,
-                            'websafeSessionKeys': [session.key.urlsafe() for session in sessions],
-                            'session_num': session_num}
+                            'websafeSessionKeys': [session.key.urlsafe() for session in sessions],}
         memcache.set(url_conf_key, featured_speaker)
 
 
