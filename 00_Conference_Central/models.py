@@ -107,6 +107,45 @@ class ConferenceQueryForms(messages.Message):
     filters = messages.MessageField(ConferenceQueryForm, 1, repeated=True)
 
 
+# Speaker
+
+class Speaker(ndb.Model):
+    """Speakers have both name and organization properties to help with
+    identifying the speaker."""
+    speaker = ndb.StringProperty()
+    organization = ndb.StringProperty()
+
+
+class NewSpeakerForm(messages.Message):
+    """Used to create new speakers."""
+    speaker = messages.StringField(1, required=True)
+    organization = messages.StringField(2, required=True)
+
+
+class SpeakerForm(messages.Message):
+    """SpeakerForm -- outbound (single) string message"""
+    speaker = messages.StringField(1, required=True)
+    organization = messages.StringField(2)
+    websafeSpeakerKey = messages.StringField(3)
+
+
+class SpeakerForms(messages.Message):
+    items = messages.MessageField(SpeakerForm, 1, repeated=True)
+
+
+class QuerySpeakerForm(messages.Message):
+    """Used to query speakers by name and organization."""
+    speaker = messages.StringField(1, required=True)
+    organization = messages.StringField(2)
+
+
+class FeaturedSpeakerForm(messages.Message):
+    speaker = messages.StringField(1)
+    websafeSessionKeys = messages.StringField(2, repeated=True)
+
+
+# Session
+
 class StartTime(ndb.Model):
     """StartTime == used for the startTime property of the Conference class
     to make the start time of allow greater/less than queries of a conferences
@@ -118,7 +157,7 @@ class StartTime(ndb.Model):
 class Session(ndb.Model):
     name = ndb.StringProperty()
     highlights = ndb.StringProperty(repeated=True)
-    speaker = ndb.StringProperty()
+    speaker = ndb.StructuredProperty(Speaker)
     duration = ndb.IntegerProperty()
     typeOfSession = ndb.StringProperty(repeated=True)
     date = ndb.DateProperty()
@@ -132,10 +171,10 @@ class CreateSessionForm(messages.Message):
     date = messages.StringField(2)
     startTime = messages.StringField(3)
     highlights = messages.StringField(4, repeated=True)
-    speaker = messages.StringField(5)
+    websafeSpeakerKey = messages.StringField(5, required=True)
     duration = messages.IntegerField(6)
     typeOfSession = messages.StringField(7, repeated=True)
-    websafeConferenceKey = messages.StringField(8)
+    websafeConferenceKey = messages.StringField(8, required=True)
 
 
 class SessionForm(messages.Message):
@@ -156,7 +195,7 @@ class SessionForms(messages.Message):
 
 
 class QuerySessionsByDurationForm(messages.Message):
-    """QuerySessionByDurationForm -- Session query inbound form message.
+    """QuerySessionByDurationForm -- Session query inbound form messages.
     Takes an integer."""
     duration = messages.IntegerField(1)
 
@@ -167,12 +206,8 @@ class SessionsOfConferenceByType(messages.Message):
     websafeConferenceKey = messages.StringField(2)
 
 
-class FeaturedSpeakerForm(messages.Message):
-    speaker = messages.StringField(1)
-    websafeSessionKeys = messages.StringField(2, repeated=True)
-
-
 # needed for conference registration
+
 class BooleanMessage(messages.Message):
     """BooleanMessage-- outbound Boolean value message"""
     data = messages.BooleanField(1)
@@ -181,11 +216,6 @@ class BooleanMessage(messages.Message):
 class ConflictException(endpoints.ServiceException):
     """ConflictException -- exception mapped to HTTP 409 response"""
     http_status = httplib.CONFLICT
-
-
-class SpeakerForm(messages.Message):
-    """SpeakerForm -- outbound (single) string message"""
-    speaker = messages.StringField(1, required=True)
 
 
 class HighlightsForm(messages.Message):

@@ -45,6 +45,10 @@ from models import StartTime
 from models import FeaturedSpeakerForm
 from models import SpeakerForm
 from models import HighlightsForm
+from models import Speaker
+from models import QuerySpeakerForm
+from models import SpeakerForms
+from models import NewSpeakerForm
 
 from utils import getUserId
 
@@ -67,6 +71,11 @@ SESS_GET_REQUEST = endpoints.ResourceContainer(
     websafeSessionKey=messages.StringField(1),
 )
 
+SPEAKER_GET_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    websafeSpeakerKey=messages.StringField(1),
+)
+
 EMAIL_SCOPE = endpoints.EMAIL_SCOPE
 API_EXPLORER_CLIENT_ID = endpoints.API_EXPLORER_CLIENT_ID
 MEMCACHE_ANNOUNCEMENTS_KEY = "RECENT_ANNOUNCEMENTS"
@@ -80,7 +89,6 @@ DEFAULTS = {
 }
 
 SESSION_DEFAULTS = {
-    "speaker": "Default Speaker",
     "typeOfSession": [ "Default", "Type" ],
     "startTime": "08:00",
     "highlights": [ "Default", "Highlight" ],
@@ -411,12 +419,14 @@ class ConferenceApi(remote.Service):
 # - - - Sessions - - - - - - - - - - - - - - - - - - - -
 
     @staticmethod
-    def _addFeaturedSpeaker(url_conf_key, speaker):
+    def _addFeaturedSpeaker(url_conf_key, url_speaker_key):
         """Checks if the speaker speaking at conference's session is speaking at
         the most sessions at that conference."""
 
         # Get all sssions of the given conferene and filter given speaker.
         q = Session.query(ancestor=ndb.Key(urlsafe=url_conf_key))
+
+        speaker = ndb.Key(urlsafe=url_speaker_key).get()
         sessions = q.filter(Session.speaker == speaker)
 
         # if there is more than one session by the same speaker add the
@@ -436,7 +446,7 @@ class ConferenceApi(remote.Service):
                 return
 
         # set the speaker as featured if they are doing the most sessions.
-        featured_speaker = {'speaker': speaker,
+        featured_speaker = {'speaker': speaker.key.urlsafe(),
                             'websafeSessionKeys': [session.key.urlsafe() for session in sessions],}
         memcache.set(url_conf_key, featured_speaker)
 
@@ -468,6 +478,16 @@ class ConferenceApi(remote.Service):
             raise endpoints.BadRequestException(
                 'websafeConfernceKey must be provided.')
 
+        # verify that websafeSpeaker key was provided and points to a speaker
+        if not request.websafeSpeakerKey:
+            raise endpoints.BadRequestException(
+                'websafeSpeakerKey must be provided.')
+        speaker_obj = ndb.Key(urlsafe=request.websafeSpeakerKey).get()
+
+        if not speaker_obj:
+            raise endpoints.NotFoundException(
+                'Speaker not found.')
+
         conf_key = ndb.Key(urlsafe=request.websafeConferenceKey)
         # verify that the key is for a Conference object.
         if conf_key.kind() != 'Conference':
@@ -487,6 +507,7 @@ class ConferenceApi(remote.Service):
         data = {field.name: getattr(request, field.name)
                 for field in request.all_fields()}
         del data['websafeConferenceKey']
+        del data['websafeSpeakerKey']
 
         # set default values to empty fields for both data model and inbound
         # request.
@@ -508,17 +529,18 @@ class ConferenceApi(remote.Service):
         c_id = Session.allocate_ids(size=1, parent=conf_key)[0]
         c_key = ndb.Key(Session, c_id, parent=conf_key)
         data['key'] = c_key
+        data['speaker'] = speaker_obj
 
         new_session = Session(**data)
         new_session.put()
 
         # Update the featured speaker if there is one.
-        speaker = data['speaker']
-        self._addFeaturedSpeaker(request.websafeConferenceKey, speaker)
+        self._addFeaturedSpeaker(
+            request.websafeConferenceKey, request.websafeSpeakerKey)
 
         # Check to see if the added speaker has the most sessions at the
         # given conference.
-        taskqueue.add(params={'speaker': data['speaker'],
+        taskqueue.add(params={'speaker': request.websafeSpeakerKey,
                               'conf_key': conf_key.urlsafe()},
                       url='/tasks/add_featured_speaker')
 
@@ -542,6 +564,8 @@ class ConferenceApi(remote.Service):
                 # convert Date to date string; just copy others
                 if field.name == 'date' or field.name == 'startTime':
                     setattr(sf, field.name, str(getattr(sess, field.name)))
+                elif field.name == 'speaker':
+                    setattr(sf, field.name, getattr(sess, field.name).speaker)
                 else:
                     setattr(sf, field.name, getattr(sess, field.name))
             elif field.name == "websafeSessionKey":
@@ -566,15 +590,15 @@ class ConferenceApi(remote.Service):
             items=[self._copySessionToForm(session) for session in sessions])
 
 
-    @endpoints.method(SpeakerForm, SessionForms,
+    @endpoints.method(SPEAKER_GET_REQUEST, SessionForms,
             path='sessions/byspeaker',
             http_method='GET',
             name='getSessionsBySpeaker')
     def getSessionsBySpeaker(self, request):
-        """Given a speaker, return all sessions given by this particular
+        """Given a speaker websafe key , return all sessions given by this particular
         speaker, across all conferences"""
-
-        q = Session.query().filter(Session.speaker == request.speaker)
+        speaker_obj = ndb.Key(urlsafe=request.websafeSpeakerKey).get()
+        q = Session.query().filter(Session.speaker == speaker_obj)
         return SessionForms(
             items=[self._copySessionToForm(sess) for sess in q])
 
@@ -645,6 +669,65 @@ class ConferenceApi(remote.Service):
 
         return SessionForms(
             items=[self._copySessionToForm(session) for session in q])
+
+
+# - - - Speaker - - - - - - - - - - - - - - - - - - - -
+
+    @endpoints.method(NewSpeakerForm, SpeakerForm,
+            path='speaker/create',
+            http_method='POST', name='createSpeaker')
+    def createSpeaker(self, request):
+        """Create a new spaeker form with provided speaker name and
+        organization"""
+
+        # make sure user is logged in.
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+
+        # copy request data into a dictionary.
+        data = {field.name: getattr(request, field.name) for field in request.all_fields()}
+
+        # get a key for the speaker.
+        speaker_id = Speaker.allocate_ids(size=1)[0]
+        speaker_key = ndb.Key(Speaker, speaker_id)
+        data['key'] = speaker_key
+
+        new_speaker = Speaker(**data)
+        new_speaker.put()
+
+        return self._copySpeakerToForm(new_speaker)
+
+
+    def _copySpeakerToForm(self, speaker):
+        """Copy data from a Speaker entity to a SpeakerForm"""
+
+        speaker_form = SpeakerForm()
+        for field in speaker_form.all_fields():
+            if hasattr(speaker, field.name):
+                setattr(speaker_form, field.name, getattr(speaker, field.name))
+            elif field.name == "websafeSpeakerKey":
+                setattr(speaker_form, field.name, speaker.key.urlsafe())
+        speaker_form.check_initialized()
+
+        return speaker_form
+
+
+    @endpoints.method(QuerySpeakerForm, SpeakerForms,
+            http_method='GET',
+            path='queryspeaker', name='querySpeaker')
+    def querySpeaker(self, request):
+        """Queries all speakers with the name and or organization provided."""
+
+        q = Speaker.query()
+        q = q.filter(Speaker.speaker == request.speaker)
+
+        # if an organization query is provided, query speaker by organization
+        if request.organization:
+            q = q.filter(Speaker.organization == request.organization)
+
+        return SpeakerForms(items = [self._copySpeakerToForm(s) for s in q])
+
 
 
 # - - - Wishlist - - - - - - - - - - - - - - - - - - - -
