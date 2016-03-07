@@ -194,6 +194,11 @@ class ConferenceApi(remote.Service):
 
     def _copyConferenceToForm(self, conf, displayName):
         """Copy relevant fields from Conference to ConferenceForm."""
+
+        # If no input provided return none.
+        if not conf:
+            return
+
         cf = ConferenceForm()
         for field in cf.all_fields():
             if hasattr(conf, field.name):
@@ -558,6 +563,11 @@ class ConferenceApi(remote.Service):
 
     def _copySessionToForm(self, sess):
         """Copy relevant fields from Session to SessionForm."""
+
+        # If no input provided return none.
+        if not sess:
+            return
+
         sf = SessionForm()
         for field in sf.all_fields():
             if hasattr(sess, field.name):
@@ -702,6 +712,11 @@ class ConferenceApi(remote.Service):
     def _copySpeakerToForm(self, speaker):
         """Copy data from a Speaker entity to a SpeakerForm"""
 
+        # If no input provided return none.
+        if not speaker:
+            return
+
+
         speaker_form = SpeakerForm()
         for field in speaker_form.all_fields():
             if hasattr(speaker, field.name):
@@ -711,6 +726,15 @@ class ConferenceApi(remote.Service):
         speaker_form.check_initialized()
 
         return speaker_form
+
+
+    @endpoints.method(SPEAKER_GET_REQUEST, SpeakerForm,
+            http_method='GET',
+            path='speaker/getbywsk', name='getSpeakerByWsk')
+    def getSpeakerByWsk(self, request):
+        """Get the Speaker for a given websafeSpeakerKey."""
+        speaker = ndb.Key(urlsafe=request.websafeSpeakerKey).get()
+        return self._copySpeakerToForm(speaker)
 
 
     @endpoints.method(QuerySpeakerForm, SpeakerForms,
